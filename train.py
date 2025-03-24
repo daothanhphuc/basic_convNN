@@ -2,12 +2,12 @@ import pandas as pd
 import numpy as np
 from PIL import Image
 from model import CNN
-from dataset import AnimalDataset
+from dataset import AnimalDataset, CIFAR10Dataset
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import models, transforms
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, random_split
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.transforms import Compose, ToTensor, Resize, Normalize, RandomHorizontalFlip, RandomRotation, RandomResizedCrop
 from tqdm.autonotebook import tqdm
@@ -48,7 +48,7 @@ def plot_confusion_matrix(writer,cm, class_names, epoch):
 
 
 def train():
-    num_epochs = 30
+    num_epochs = 20
     BATCH = 64 
     LR = 0.001
     momentum = 0.9
@@ -61,32 +61,47 @@ def train():
     #     ToTensor(),
     #     Resize((224, 224))
     # ])
+
+    # transform = Compose([
+    #     ToTensor(),
+    #     Resize((224, 224))
+    # ])
+
     transform = Compose([
         ToTensor(),
-        Resize((224, 224))
+        Resize((32, 32)) 
     ])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    train_dataset = AnimalDataset(path="data", is_train=True, transform=transform)
-    train_loader = DataLoader(train_dataset, batch_size=BATCH, shuffle=True, num_workers=4, drop_last=True)
-    val_dataset = AnimalDataset(path="data", is_train=False, transform=transform)
-    val_loader = DataLoader(val_dataset, batch_size=BATCH, shuffle=False, num_workers=4, drop_last=True)
-    # model = CNN(len(train_dataset.classes)).to(device)
+    # train_dataset = AnimalDataset(path="data", is_train=True, transform=transform)
+    # train_loader = DataLoader(train_dataset, batch_size=BATCH, shuffle=True, num_workers=4, drop_last=True)
+    # val_dataset = AnimalDataset(path="data", is_train=False, transform=transform)
+    # val_loader = DataLoader(val_dataset, batch_size=BATCH, shuffle=False, num_workers=4, drop_last=True)
 
-    model = models.resnet18(pretrained=True)
+    full_train_dataset = CIFAR10Dataset(path="data/cifar10", is_train=True, transform=transform)  
+
+    val_size = int(0.1 * len(full_train_dataset))  # Use 10% of the data for validation
+    train_size = len(full_train_dataset) - val_size
+    train_dataset, val_dataset = random_split(full_train_dataset, [train_size, val_size])
+
+    train_loader = DataLoader(train_dataset, batch_size=BATCH, shuffle=True, num_workers=4, drop_last=True)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH, shuffle=False, num_workers=4, drop_last=True)
+
+    model = CNN(len(full_train_dataset.classes)).to(device).to(device)
+
+    # model = models.resnet18(pretrained=True)
 
     # Modify the last fully connected layer to match the number of classes in your dataset
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, len(train_dataset.classes))
-    model = model.to(device)
+    # num_ftrs = model.fc.in_features
+    # model.fc = nn.Linear(num_ftrs, len(train_dataset.classes))
 
-    # Freeze all layers except for the last fully connected layer
-    for param in model.parameters():
-        param.requires_grad = False  # Freeze all layers
+    # # freeze all layers except for the last fully connected layer
+    # for param in model.parameters():
+    #     param.requires_grad = False  # freeze all layers
 
-    # Unfreeze the final fully connected layer
-    for param in model.fc.parameters():
-        param.requires_grad = True
+    # # unfreeze the final fully connected layer
+    # for param in model.fc.parameters():
+    #     param.requires_grad = True
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=LR, momentum=momentum)
@@ -140,7 +155,7 @@ def train():
         writer.add_scalar("Loss/val", avr_loss, global_step=epoch)
         acc = accuracy_score(all_labels, all_preds)
         writer.add_scalar("Accuracy/val", acc, global_step=epoch)
-        plot_confusion_matrix(writer, confusion_matrix(all_labels, all_preds), train_dataset.classes, epoch)
+        plot_confusion_matrix(writer, confusion_matrix(all_labels, all_preds), full_train_dataset.classes, epoch)
         torch.save(model.state_dict(), os.path.join(checkpoint_path, "last.pt".format()) )
         if acc > best_acc:
             best_acc = acc
