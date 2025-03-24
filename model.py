@@ -11,7 +11,8 @@ class CNN(nn.Module):
 
         self.fcl1 = nn.Sequential(
             nn.Dropout(0.5),
-            nn.Linear(in_features= 6272, out_features=512),
+            # nn.Linear(in_features= 6272, out_features=512),
+            nn.Linear(in_features= 128*1*1, out_features=512),
             nn.ReLU()
         )
         self.fcl2 = nn.Sequential(
@@ -29,8 +30,8 @@ class CNN(nn.Module):
         x = self.conv4(x)
         x = self.conv5(x)
 
-        b, c, h, w = x.shape    # batch, channel, height, width
-        x= x.view(b, -1)        # flatten the tensor     
+        b, c, h, w = x.shape    
+        x= x.view(b, -1)    # flatten the tensor     
 
         x = self.fcl1(x)
         x = self.fcl2(x)
